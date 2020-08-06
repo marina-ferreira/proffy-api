@@ -2,6 +2,32 @@ const db = require('../database/connection.js')
 const timeConverter = require('../utils/timeConverter.js')
 
 class ClassesController {
+  async index(request, response) {
+    const filters = request.query
+    const isMissingFilters = !filters.subject || !filters.week_day || !filters.time
+    const errorMsg = { error: 'Missing filters' }
+
+    if (isMissingFilters) return response.status(400).json(errorMsg)
+
+    const { subject, week_day } = filters
+    const time = timeConverter(filters.time)
+
+    const classes = await db('classes')
+      .whereExists(function () {
+        this.select('class_schedule.*')
+          .from('class_schedule')
+          .whereRaw('`class_schedule`.`class_id` = `classes`.`id`')
+          .whereRaw('`class_schedule`.`week_day` = ??', [Number(week_day)])
+          .whereRaw('`class_schedule`.`from` <= ??', [Number(time)])
+          .whereRaw('`class_schedule`.`to` > ??', [Number(time)])
+      })
+      .where('classes.subject', '=', subject)
+      .join('users', 'classes.user_id', '=', 'users.id')
+      .select(['classes.*', 'users.*'])
+
+    return response.json(classes)
+  }
+
   async create(request, response) {
     const {
       name,
@@ -49,4 +75,4 @@ class ClassesController {
   }
 }
 
-export default ClassesController
+module.exports = ClassesController
